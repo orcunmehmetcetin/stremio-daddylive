@@ -5,9 +5,9 @@ const axios = require("axios");
 
 const manifest = {
     id: "org.orcun.daddylive",
-    version: "1.1.0",
-    name: "DaddyLive TR (Dinamik)",
-    description: "ABC, CBS, NBC ve FOX - Her zaman güncel linkler.",
+    version: "1.2.0",
+    name: "DaddyLive TR (V2)",
+    description: "ABC, CBS, NBC ve FOX - Dinamik Token ve Gelişmiş Log Sistemi",
     resources: ["stream", "catalog", "meta"],
     types: ["tv"],
     catalogs: [
@@ -22,7 +22,7 @@ const manifest = {
 
 const builder = new addonBuilder(manifest);
 
-// 1. KATALOG (Kanal Listesi - NBC ve FOX eklendi)
+// 1. KATALOG (Çalışan kısımlar korundu)
 builder.defineCatalogHandler((args) => {
     if (args.id === "daddylive_channels") {
         return Promise.resolve({
@@ -37,7 +37,7 @@ builder.defineCatalogHandler((args) => {
     return Promise.resolve({ metas: [] });
 });
 
-// 2. META HANDLER
+// 2. META HANDLER (Çalışan kısımlar korundu)
 builder.defineMetaHandler((args) => {
     const channels = {
         "dlhd-51": "ABC", "dlhd-52": "CBS", "dlhd-53": "NBC", "dlhd-54": "FOX"
@@ -48,25 +48,33 @@ builder.defineMetaHandler((args) => {
     return Promise.resolve({ meta: null });
 });
 
-// 3. STREAM HANDLER (Dinamik Token Alıcı Eklenen Bölüm)
+// 3. STREAM HANDLER (Geliştirilmiş Bölüm)
 builder.defineStreamHandler(async (args) => {
     if (args.type === "tv" && args.id.startsWith("dlhd-")) {
         const channelId = args.id.replace("dlhd-", "");
+        console.log(`[LOG] ${channelId} için anahtar aranıyor...`);
         
         try {
-            // Arka planda embed sayfasına gidip token alıyoruz
+            // Bot korumasını aşmak için daha gerçekçi header'lar kullanıyoruz
             const response = await axios.get(`https://embedkclx.sbs/embed.php?id=${channelId}`, {
                 headers: {
                     'Referer': 'https://daddylive.mp/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9'
+                },
+                timeout: 7000
             });
 
-            // HTML içinden "token" ve "server" bilgisini ayıklıyoruz
             const html = response.data;
+            // Token yakalama
             const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/);
             
-            // Eğer taze token bulamazsak eski usul (ama taze header ile) dene
+            if (tokenMatch) {
+                console.log(`[BAŞARI] Token yakalandı: ${tokenMatch[1].substring(0, 10)}...`);
+            } else {
+                console.log("[UYARI] Sayfa açıldı ama token bulunamadı! Site korumayı artırmış olabilir.");
+            }
+
             const streamUrl = `https://sec.ai-hls.site/proxy/top1/cdn/${channelId}/mono.css${tokenMatch ? '?token=' + tokenMatch[1] : ''}`;
 
             return {
@@ -88,7 +96,7 @@ builder.defineStreamHandler(async (args) => {
                 ]
             };
         } catch (error) {
-            console.error("Link alınamadı:", error);
+            console.error(`[HATA] ${channelId} için link alınırken hata oluştu:`, error.message);
             return { streams: [] };
         }
     }
@@ -98,4 +106,7 @@ builder.defineStreamHandler(async (args) => {
 const app = express();
 app.use("/", getRouter(builder.getInterface()));
 const port = process.env.PORT || 7000;
-app.listen(port, () => console.log(`Eklenti ${port} portunda hazır!`));
+app.listen(port, () => {
+    console.log(`Eklenti ${port} portunda hazır!`);
+    console.log("Stremio eklenti linki: https://stremio-daddylive.onrender.com/manifest.json");
+});
