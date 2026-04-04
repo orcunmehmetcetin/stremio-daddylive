@@ -1,5 +1,6 @@
 const { addonBuilder } = require("stremio-addon-sdk");
-const axios = require("axios");
+const express = require("express");
+const { getRouter } = require("stremio-addon-sdk");
 
 const manifest = {
     id: "org.orcun.daddylive",
@@ -14,15 +15,15 @@ const manifest = {
 
 const builder = new addonBuilder(manifest);
 
-builder.streamHandler(async (args) => {
+// Hata veren kısım burasıydı, şimdi doğrusunu yazıyoruz:
+builder.defineStreamHandler(async (args) => {
     if (args.type === "tv" && args.id.startsWith("dlhd-")) {
         const channelId = args.id.replace("dlhd-", "");
         
-        // Senin Kiwi'de bulduğun ana sunucu ve yol mantığı
-        // Not: Bu kısım dinamik token çekmek için geliştirilebilir
+        // Senin yakaladığın o gizli mono.css yolu
         const streamUrl = `https://sec.ai-hls.site/proxy/top1/cdn/${channelId}/mono.css`;
 
-        return Promise.resolve({
+        return {
             streams: [
                 {
                     title: "Canlı Yayın (Daddylive)",
@@ -39,18 +40,19 @@ builder.streamHandler(async (args) => {
                     }
                 }
             ]
-        });
+        };
     }
-    return Promise.resolve({ streams: [] });
+    return { streams: [] };
 });
 
-const addonInterface = builder.getInterface();
-const { getRouter } = require("stremio-addon-sdk");
-const express = require("express");
 const app = express();
+const addonInterface = builder.getInterface();
 const router = getRouter(addonInterface);
 
 app.use("/", router);
-app.listen(process.env.PORT || 7000, () => {
-    console.log("Addon is running!");
+
+const port = process.env.PORT || 7000;
+app.listen(port, () => {
+    console.log(`Addon is running on port ${port}`);
+    console.log(`Manifest available at http://localhost:${port}/manifest.json`);
 });
