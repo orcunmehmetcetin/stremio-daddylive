@@ -1,13 +1,13 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const express = require("express");
 const { getRouter } = require("stremio-addon-sdk");
-const axios = require("axios");
+const puppeteer = require("puppeteer");
 
 const manifest = {
     id: "org.orcun.daddylive",
-    version: "1.4.0",
-    name: "DaddyLive TR (V4)",
-    description: "ABC, CBS, NBC ve FOX - Iframe Kandırma Modu",
+    version: "2.0.0",
+    name: "DaddyLive Puppeteer Sızma",
+    description: "Network İzleme Modu - Artık HTML Değil Trafik Dinliyoruz",
     resources: ["stream", "catalog", "meta"],
     types: ["tv"],
     catalogs: [
@@ -22,7 +22,7 @@ const manifest = {
 
 const builder = new addonBuilder(manifest);
 
-// 1. KATALOG (Dokunulmadı - Çalışıyor)
+// KATALOG VE META (Dokunulmadı)
 builder.defineCatalogHandler((args) => {
     if (args.id === "daddylive_channels") {
         return Promise.resolve({
@@ -37,55 +37,60 @@ builder.defineCatalogHandler((args) => {
     return Promise.resolve({ metas: [] });
 });
 
-// 2. META HANDLER (Dokunulmadı - Çalışıyor)
 builder.defineMetaHandler((args) => {
-    const channels = {
-        "dlhd-51": "ABC", "dlhd-52": "CBS", "dlhd-53": "NBC", "dlhd-54": "FOX"
-    };
-    if (channels[args.id]) {
-        return Promise.resolve({ meta: { id: args.id, type: "tv", name: channels[args.id] } });
-    }
-    return Promise.resolve({ meta: null });
+    const channels = { "dlhd-51": "ABC", "dlhd-52": "CBS", "dlhd-53": "NBC", "dlhd-54": "FOX" };
+    return Promise.resolve({ meta: channels[args.id] ? { id: args.id, type: "tv", name: channels[args.id] } : null });
 });
 
-// 3. STREAM HANDLER (Sızma ve Kandırma Bölümü)
+// YENİ STREAM HANDLER (Puppeteer Network Sniffer)
 builder.defineStreamHandler(async (args) => {
     if (args.type === "tv" && args.id.startsWith("dlhd-")) {
         const channelId = args.id.replace("dlhd-", "");
-        console.log(`--- [OPERASYON] ${channelId} için sızma başladı ---`);
-        
+        console.log(`--- [OPERASYON] ${channelId} için Görünmez Tarayıcı Başlatıldı ---`);
+
+        let browser;
         try {
-            const response = await axios.get(`https://embedkclx.sbs/embed.php?id=${channelId}`, {
-                headers: {
-                    'Referer': 'https://daddylive.mp/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Sec-Fetch-Dest': 'iframe', // KRİTİK: "Ben bir iframe'im" diyoruz
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'cross-site'
-                },
-                timeout: 8000
+            // Render üzerinde Chrome çalıştırmak için gerekli ayarlar
+            browser = await puppeteer.launch({
+                headless: "new",
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
 
-            const html = response.data;
-            console.log(`[LOG] Sayfa boyutu: ${html.length} karakter`);
-
-            // Token yakalama
-            const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/);
+            const page = await browser.newPage();
             
-            if (tokenMatch) {
-                console.log(`[BİNGO] Token sızdırıldı: ${tokenMatch[1].substring(0, 10)}...`);
-            } else {
-                console.log(`[DİKKAT] Boyut ${html.length}, ama token yok. Sayfa başı: ${html.substring(0, 100).replace(/\s+/g, ' ')}`);
+            // Gerçek bir tarayıcı gibi davranıyoruz
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36');
+            await page.setExtraHTTPHeaders({ 'Referer': 'https://daddylive.mp/' });
+
+            let capturedUrl = null;
+
+            // NETWORK DİNLEME: Trafikte .css veya .m3u8 geçen linkleri avla
+            page.on('request', request => {
+                const url = request.url();
+                // Senin yakaladığın o 'mono.css' aslında m3u8'in ta kendisi
+                if (url.includes('mono.css') || url.includes('.m3u8')) {
+                    if (!capturedUrl) {
+                        console.log(`[BİNGO] Trafikten yakalandı: ${url.substring(0, 60)}...`);
+                        capturedUrl = url;
+                    }
+                }
+            });
+
+            // Sayfayı aç ve sızıntı olması için bekle (Max 15 sn)
+            await page.goto(`https://embedkclx.sbs/embed.php?id=${channelId}`, { waitUntil: 'networkidle2', timeout: 20000 });
+            
+            // Eğer hala yakalanmadıysa biraz daha bekle
+            if (!capturedUrl) {
+                await new Promise(r => setTimeout(r, 5000));
             }
 
-            const streamUrl = `https://sec.ai-hls.site/proxy/top1/cdn/${channelId}/mono.css${tokenMatch ? '?token=' + tokenMatch[1] : ''}`;
+            await browser.close();
 
-            return {
-                streams: [
-                    {
-                        title: tokenMatch ? "Canlı Yayın (Anahtarlı)" : "Canlı Yayın (Deneysel)",
-                        url: streamUrl,
+            if (capturedUrl) {
+                return {
+                    streams: [{
+                        title: "Yüksek Kalite (Network Sniff)",
+                        url: capturedUrl,
                         behaviorHints: {
                             notWebReady: true,
                             proxyHeaders: {
@@ -96,12 +101,13 @@ builder.defineStreamHandler(async (args) => {
                                 }
                             }
                         }
-                    }
-                ]
-            };
+                    }]
+                };
+            }
+
         } catch (error) {
-            console.error(`[HATA] ${channelId} sızma başarısız:`, error.message);
-            return { streams: [] };
+            console.error(`[OPERASYON HATASI]:`, error.message);
+            if (browser) await browser.close();
         }
     }
     return { streams: [] };
@@ -110,6 +116,5 @@ builder.defineStreamHandler(async (args) => {
 const app = express();
 app.use("/", getRouter(builder.getInterface()));
 const port = process.env.PORT || 7000;
-app.listen(port, () => {
-    console.log(`Sızma Modu ${port} portunda hazır!`);
-});
+app.listen(port, () => console.log(`Sızma Modu V2 Ready!`));
+                
