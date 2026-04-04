@@ -5,9 +5,9 @@ const axios = require("axios");
 
 const manifest = {
     id: "org.orcun.daddylive",
-    version: "1.3.0", // Versiyonu artırdık
-    name: "DaddyLive TR (V3)",
-    description: "ABC, CBS, NBC ve FOX - Gelişmiş Teşhis Modu",
+    version: "1.4.0",
+    name: "DaddyLive TR (V4)",
+    description: "ABC, CBS, NBC ve FOX - Iframe Kandırma Modu",
     resources: ["stream", "catalog", "meta"],
     types: ["tv"],
     catalogs: [
@@ -48,35 +48,35 @@ builder.defineMetaHandler((args) => {
     return Promise.resolve({ meta: null });
 });
 
-// 3. STREAM HANDLER (Teşhis ve Hata Ayıklama Modu)
+// 3. STREAM HANDLER (Sızma ve Kandırma Bölümü)
 builder.defineStreamHandler(async (args) => {
     if (args.type === "tv" && args.id.startsWith("dlhd-")) {
         const channelId = args.id.replace("dlhd-", "");
-        console.log(`--- [LOG] ${channelId} taranıyor... ---`);
+        console.log(`--- [OPERASYON] ${channelId} için sızma başladı ---`);
         
         try {
             const response = await axios.get(`https://embedkclx.sbs/embed.php?id=${channelId}`, {
                 headers: {
                     'Referer': 'https://daddylive.mp/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Sec-Fetch-Dest': 'iframe', // KRİTİK: "Ben bir iframe'im" diyoruz
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'cross-site'
                 },
                 timeout: 8000
             });
 
             const html = response.data;
-            
-            // ANALİZ: Render loglarında bunları göreceğiz
-            console.log(`[ANALİZ] Sayfa boyutu: ${html.length} karakter`);
-            console.log(`[ANALİZ] 'token' kelimesi geçiyor mu?: ${html.includes('token')}`);
-            console.log(`[ANALİZ] 'eval' fonksiyonu var mı?: ${html.includes('eval')}`);
+            console.log(`[LOG] Sayfa boyutu: ${html.length} karakter`);
 
+            // Token yakalama
             const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/);
             
             if (tokenMatch) {
-                console.log(`[BAŞARI] Token bulundu: ${tokenMatch[1].substring(0, 10)}...`);
+                console.log(`[BİNGO] Token sızdırıldı: ${tokenMatch[1].substring(0, 10)}...`);
             } else {
-                // Token bulunamazsa sayfanın ilk kısmını logla ki neyle karşılaştığımızı görelim
-                console.log("[HATA] Token yok! Sayfa içeriği (İlk 200 karakter):", html.substring(0, 200).replace(/\s+/g, ' '));
+                console.log(`[DİKKAT] Boyut ${html.length}, ama token yok. Sayfa başı: ${html.substring(0, 100).replace(/\s+/g, ' ')}`);
             }
 
             const streamUrl = `https://sec.ai-hls.site/proxy/top1/cdn/${channelId}/mono.css${tokenMatch ? '?token=' + tokenMatch[1] : ''}`;
@@ -84,7 +84,7 @@ builder.defineStreamHandler(async (args) => {
             return {
                 streams: [
                     {
-                        title: tokenMatch ? "Canlı Yayın (Anahtarlı)" : "Canlı Yayın (Anahtarsız Deneme)",
+                        title: tokenMatch ? "Canlı Yayın (Anahtarlı)" : "Canlı Yayın (Deneysel)",
                         url: streamUrl,
                         behaviorHints: {
                             notWebReady: true,
@@ -100,7 +100,7 @@ builder.defineStreamHandler(async (args) => {
                 ]
             };
         } catch (error) {
-            console.error(`[KRİTİK HATA] ${channelId} bağlantı sorunu:`, error.message);
+            console.error(`[HATA] ${channelId} sızma başarısız:`, error.message);
             return { streams: [] };
         }
     }
@@ -110,4 +110,6 @@ builder.defineStreamHandler(async (args) => {
 const app = express();
 app.use("/", getRouter(builder.getInterface()));
 const port = process.env.PORT || 7000;
-app.listen(port, () => console.log(`Dedektif Modu ${port} portunda hazır!`));
+app.listen(port, () => {
+    console.log(`Sızma Modu ${port} portunda hazır!`);
+});
