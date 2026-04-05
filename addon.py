@@ -1,8 +1,7 @@
 from flask import Flask, jsonify, abort
 import asyncio
-import os
 from scraper import DaddyliveScraper
-
+import os
 
 app = Flask(__name__)
 scraper = DaddyliveScraper()
@@ -22,7 +21,7 @@ MANIFEST = {
             "name": "Daddylive Canlı TV"
         }
     ],
-    "idPrefixes": ["dlhd"] # Kanallarımızın ID formatı (Örn: dlhd:302)
+    "idPrefixes": ["dlhd:"] # Prefix sonuna iki nokta ekledik (dlhd:302 formatı için)
 }
 
 @app.route('/manifest.json')
@@ -32,15 +31,16 @@ def manifest():
 # 2. CATALOG: Stremio ana ekranında kanalları listeler
 @app.route('/catalog/tv/daddylive_channels.json')
 async def catalog():
+    # Flask[async] sayesinde burada doğrudan await kullanabiliyoruz
     channels = await scraper.get_channels()
     metas = []
     
     for ch in channels:
         metas.append({
-            "id": f"dlhd:{ch['id']}",
+            "id": f"dlhd:{ch['id']}", # Scraper'dan gelen ID'yi prefix ile birleştiriyoruz
             "type": "tv",
             "name": ch['name'],
-            "poster": ch['logo'], # Logo eşleştirmesi scraper'dan geliyor
+            "poster": ch['logo'],
             "background": ch['logo']
         })
     
@@ -49,8 +49,9 @@ async def catalog():
 # 3. STREAM: Kanala tıklandığında oynatılacak linki verir
 @app.route('/stream/tv/<stream_id>.json')
 async def stream(stream_id):
-    # ID'den "dlhd:" ön ekini temizleyip sadece rakamı alıyoruz
-    clean_id = stream_id.replace("dlhd:", "")
+    # stream_id bize "dlhd:123.json" veya "dlhd:123" olarak gelebilir
+    # .json uzantısını ve prefixi temizleyip saf ID'yi alıyoruz
+    clean_id = stream_id.replace("dlhd:", "").replace(".json", "")
     
     stream_url = await scraper.get_stream_url(clean_id)
     
@@ -60,13 +61,15 @@ async def stream(stream_id):
     return jsonify({
         "streams": [
             {
-                "title": "Daddylive HD",
+                "name": "Daddylive HD",
+                "title": "⚡ Hızlı Yayın",
                 "url": stream_url,
                 "behaviorHints": {
                     "notWebReady": False,
                     "proxyHeaders": {
                         "request": {
-                            "Referer": "https://dlhd.dad/" # TV'nin hata almaması için gereken kimlik bilgisi
+                            # Buradaki adresi de yeni domainle güncelledik
+                            "Referer": "https://dlstreams.top/" 
                         }
                     }
                 }
@@ -74,11 +77,8 @@ async def stream(stream_id):
         ]
     })
 
-import os
-
 if __name__ == '__main__':
-    # Bulut sunucunun verdiği portu al, yoksa 7000 kullan
-    port = int(os.environ.get("PORT", 7000))
+    # Render için port ayarı
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
     
-  
