@@ -1,6 +1,8 @@
 from flask import Flask, jsonify, abort
-from scraper import DaddyliveScraper
 import asyncio
+import os
+from scraper import DaddyliveScraper
+
 
 app = Flask(__name__)
 scraper = DaddyliveScraper()
