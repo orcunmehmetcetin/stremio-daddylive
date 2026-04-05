@@ -72,7 +72,11 @@ async def stream(stream_id):
         ]
     })
 
+import os
+
 if __name__ == '__main__':
-    # Sunucuyu 7000 portunda başlatıyoruz
-    app.run(host='0.0.0.0', port=7000)
+    # Bulut sunucunun verdiği portu al, yoksa 7000 kullan
+    port = int(os.environ.get("PORT", 7000))
+    app.run(host='0.0.0.0', port=port)
+    
   
