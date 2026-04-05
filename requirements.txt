@@ -1,0 +1,5 @@
+stremio-addon
+curl_cffi
+beautifulsoup4
+flask
+python-dotenv
