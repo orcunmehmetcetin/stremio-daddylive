@@ -1,5 +1,5 @@
-stremio-addon
+Flask
+gunicorn
 curl_cffi
 beautifulsoup4
-flask
 python-dotenv
