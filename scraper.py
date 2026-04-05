@@ -2,7 +2,7 @@ import re
 import html
 from curl_cffi import AsyncSession
 from typing import List
-from .utils import decode_bundle, encrypt # utils.py'den şifreleme fonksiyonlarını alıyoruz
+from utils import decode_bundle, encrypt # utils.py'den şifreleme fonksiyonlarını alıyoruz
 
 class DaddyliveScraper:
     def __init__(self):
